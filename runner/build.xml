@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+
+<project name="DedupTrafficRunner" basedir="." default="all">
+
+   <!-- Set up project.class.path -->
+   <path id="project.class.path">
+      <pathelement location="build"/>
+      <!-- append the external classpath -->
+      <pathelement path="${java.class.path}"/>
+   </path>
+
+   <!-- Init -->
+   <target name="init">
+      <property file="build.properties"/>
+      <property name="name" value="dedupv1_tr"/>
+      <property name="src.dir" value="src"/>
+      <property name="build.dir" value="build"/>
+      <property name="dist.dir" value="dist"/>
+   </target>
+
+
+   <!-- prepare output directories -->
+   <target name="prepare" depends="init">
+      <mkdir dir="${build.dir}"/>
+      <mkdir dir="${dist.dir}"/>
+   </target>
+
+
+   <!-- compile sources to classes -->
+   <target name="compile" depends="prepare">
+      <javac srcdir="${src.dir}" destdir="${build.dir}" debug="true" deprecation="true" source="1.6" target="1.6" encoding="UTF-8">
+         <classpath refid="project.class.path"/>
+      </javac>
+    </target>
+
+   <!-- packs classes and resources into a jar file -->
+   <target name="dist" depends="compile">
+      <jar jarfile="${dist.dir}/${name}.jar" compress="true">
+         <zipfileset dir="${build.dir}" prefix="">
+            <include name="de/pc2/**/*"/>
+         </zipfileset>
+         <zipfileset dir="${src.dir}" prefix="" excludes="**/*.java">
+            <include name="de/pc2/**/*"/>
+         </zipfileset>
+        <manifest>
+        	<attribute name="Main-Class" value="de.pc2.dedup.traffic.runner.TrafficRunner"/>
+          <attribute name="Built-By" value="${user.name}"/>
+        </manifest>
+      </jar>
+   </target>
+   <target name="all" depends="dist">
+   </target>
+	
+   <!-- Clean everything -->
+   <target name="clean" depends="init">
+      <delete dir="${dist.dir}"/>
+      <delete dir="${build.dir}"/>
+   </target>
+</project>
+

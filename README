@@ -1,0 +1,10 @@
+
+ = Simple Deduplication Benchmark =
+
+ Usually Benchmarks of Deduplication systems use real-life data of production systems. Due to privacy concerns, this benchmarks are not publically available.
+
+This projects provides the first (to my knowledge) benchmark for data deduplcation storage systems that does not use any private data. 
+
+However, the benchmark is not without limitations. The most obviously is that the data set must fit in the main memory of the client.
+
+The generator sub project is used to generate traffic data. The runner subproject is used to write the generated traffic data as fast as possible to the deduplication system.
