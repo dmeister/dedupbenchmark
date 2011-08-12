@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+import os
+import sys
+import subprocess
+
+def check_java_version():
+    def run(cmd):
+        return subprocess.Popen(cmd, shell = True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).stdout.read()
+    try:
+        r = run("java -version")
+        supported_version = ["1.5", "1.6", "1.7"]
+        for v in supported_version:
+            if r.find(v) >= 0:
+                return True
+    except :
+        raise Exception("Failed to detect java version")
+    raise Exception("No supported java version found")
+
+def get_root():
+    mod = sys.modules[__name__]
+    return os.path.normpath(os.path.dirname(mod.__file__))
+
+def from_root(*args):
+    return os.path.normpath(os.path.join(get_root(), *args))
+
+def get_cp():
+    cp = [from_root("dedup_tr.jar")]
+    lib_dir = from_root("lib")
+    for file in os.listdir(lib_dir):
+        if file.endswith(".jar"):
+            cp.append(os.path.join(lib_dir, file))
+    cp.append(from_root("conf"))
+    return cp
+
+if __name__ == "__main__":
+    check_java_version()
+            
+    java_class = "de.pc2.dedup.traffic.runner.OnlineTrafficRunner"
+    cmd_args = ["java"]
+    
+    if "DTR_XMX" in os.environ:
+        cmd_args.append("-Xmx%s" % os.environ["DTR_XMX"])
+    else:
+        cmd_args.append("-Xmx1G")
+    
+    cmd_args.extend(["-server", "-cp",":".join(get_cp()), java_class])
+    cmd_args.extend(sys.argv[1:])
+    
+    cmd = " ".join(cmd_args)
+    os.system(cmd)

@@ -10,7 +10,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.apache.log4j.Logger;
-import org.uncommons.maths.random.DevRandomSeedGenerator;
+import org.uncommons.maths.random.MersenneTwisterRNG;
 import org.uncommons.maths.random.SeedGenerator;
 
 import com.google.common.base.Preconditions;
@@ -19,7 +19,6 @@ import de.pc2.dedup.traffic.runner.data.Data;
 import de.pc2.dedup.traffic.runner.data.RedundantData;
 import de.pc2.dedup.traffic.runner.data.UniqueData;
 import de.pc2.dedup.traffic.runner.dist.Distribution;
-import de.pc2.dedup.traffic.runner.random.XORShiftRandomGenerator;
 
 public class FirstGenerationTraffic extends Traffic {
 
@@ -46,13 +45,12 @@ public class FirstGenerationTraffic extends Traffic {
 		private final int endIndex;
 		private final ExecutorService executor = Executors
 				.newFixedThreadPool(1);
-		private XORShiftRandomGenerator redundantRandom;
-		private XORShiftRandomGenerator redundantRandomData;
-		private final SeedGenerator sg = new DevRandomSeedGenerator();
+		private Random redundantRandom;
+		private Random redundantRandomData;
 		private final int startIndex;
-		private XORShiftRandomGenerator uniqueRandom;
+		private Random uniqueRandom;
 
-		private XORShiftRandomGenerator uniqueRandomData;
+		private Random uniqueRandomData;
 
 		long assignedSize;
 		Type type;
@@ -72,10 +70,10 @@ public class FirstGenerationTraffic extends Traffic {
 				throws Exception {
 			this.startIndex = startIndex;
 			this.endIndex = endIndex;
-			uniqueRandom = new XORShiftRandomGenerator(sg);
-			uniqueRandomData = new XORShiftRandomGenerator(sg);
-			redundantRandom = new XORShiftRandomGenerator(sg);
-			redundantRandomData = new XORShiftRandomGenerator(sg);
+			uniqueRandom = new MersenneTwisterRNG(seedGenerator);
+			uniqueRandomData = new MersenneTwisterRNG(seedGenerator);
+			redundantRandom = new MersenneTwisterRNG(seedGenerator);
+			redundantRandomData = new MersenneTwisterRNG(seedGenerator);
 
 			// init first block
 			type = Type.UNIQUE;
@@ -268,16 +266,22 @@ public class FirstGenerationTraffic extends Traffic {
 	private final UniqueData uniqueDataGenerator;
 	private final Distribution uniqueDistribution;
 	private final boolean directGeneration;
+	private final SeedGenerator seedGenerator;
 
 	public FirstGenerationTraffic(long size, int loadBlocks, int preloadWindow,
-			Distribution uniqueDistribution, Distribution redundantDistribution, boolean directGeneration) {
+			Distribution uniqueDistribution, Distribution redundantDistribution, 
+			SeedGenerator seedGenerator,
+			boolean directGeneration) throws Exception {
 		super(loadBlocks, preloadWindow);
 		this.uniqueDistribution = uniqueDistribution;
 		this.redundantDistribution = redundantDistribution;
 		this.directGeneration = directGeneration;
+		this.seedGenerator = seedGenerator;
+		
 		uniqueDataGenerator = new UniqueData();
+		
 
-		Random initialRedundantRandom = new XORShiftRandomGenerator();
+		Random initialRedundantRandom = new MersenneTwisterRNG(seedGenerator);
 		redundantDataGenerator = new RedundantData(2 * 1024, 32 * 1024,
 				initialRedundantRandom);
 
@@ -286,8 +290,6 @@ public class FirstGenerationTraffic extends Traffic {
 			throw new IllegalArgumentException("file too large");
 		}
 		this.blockCount = (int) blockCount;
-
-		logger.info(String.format("Size %s, block count %s", size, blockCount));
 
 		blocks = new AtomicReferenceArray<ByteBuffer>((int) blockCount);
 		block_state = new AtomicReferenceArray<Future<Boolean>>(

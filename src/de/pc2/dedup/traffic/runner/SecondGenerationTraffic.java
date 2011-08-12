@@ -11,18 +11,16 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.apache.log4j.Logger;
-import org.uncommons.maths.random.DevRandomSeedGenerator;
+import org.uncommons.maths.random.MersenneTwisterRNG;
 import org.uncommons.maths.random.SeedGenerator;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
 
-import de.pc2.dedup.traffic.runner.data.Data;
 import de.pc2.dedup.traffic.runner.data.RedundantData;
 import de.pc2.dedup.traffic.runner.data.UniqueData;
 import de.pc2.dedup.traffic.runner.dist.Distribution;
 import de.pc2.dedup.traffic.runner.dist.SwitchDistribution;
-import de.pc2.dedup.traffic.runner.random.XORShiftRandomGenerator;
 
 public class SecondGenerationTraffic extends Traffic {
 
@@ -116,16 +114,15 @@ public class SecondGenerationTraffic extends Traffic {
 		private final ExecutorService executor = Executors
 				.newFixedThreadPool(1);
 		private final TrafficSession firstGenerationTrafficSession;
-		private XORShiftRandomGenerator internalRedundantRandom;
-		private XORShiftRandomGenerator internalRedundantRandomData;
-		private final SeedGenerator sg = new DevRandomSeedGenerator();
+		private Random internalRedundantRandom;
+		private Random internalRedundantRandomData;
 		private final int startIndex;
-		private XORShiftRandomGenerator switchRandom;
-		private XORShiftRandomGenerator temporalRedundantRandom;
-		private XORShiftRandomGenerator temporalRedundantRandomData;
-		private XORShiftRandomGenerator uniqueRandom;
+		private Random switchRandom;
+		private Random temporalRedundantRandom;
+		private Random temporalRedundantRandomData;
+		private Random uniqueRandom;
 
-		private XORShiftRandomGenerator uniqueRandomData;
+		private Random uniqueRandomData;
 		long assignedSize;
 		Type type;
 
@@ -133,13 +130,13 @@ public class SecondGenerationTraffic extends Traffic {
 				throws Exception {
 			this.startIndex = startIndex;
 			this.endIndex = endIndex;
-			uniqueRandom = new XORShiftRandomGenerator(sg);
-			uniqueRandomData = new XORShiftRandomGenerator(sg);
-			internalRedundantRandom = new XORShiftRandomGenerator(sg);
-			internalRedundantRandomData = new XORShiftRandomGenerator(sg);
-			temporalRedundantRandom = new XORShiftRandomGenerator(sg);
-			temporalRedundantRandomData = new XORShiftRandomGenerator(sg);
-			switchRandom = new XORShiftRandomGenerator(sg);
+			uniqueRandom = new MersenneTwisterRNG(seedGenerator);
+			uniqueRandomData = new MersenneTwisterRNG(seedGenerator);
+			internalRedundantRandom = new MersenneTwisterRNG(seedGenerator);
+			internalRedundantRandomData = new MersenneTwisterRNG(seedGenerator);
+			temporalRedundantRandom = new MersenneTwisterRNG(seedGenerator);
+			temporalRedundantRandomData = new MersenneTwisterRNG(seedGenerator);
+			switchRandom = new MersenneTwisterRNG(seedGenerator);
 			firstGenerationTrafficSession = firstGenerationTraffic.getSession(
 					startIndex, endIndex);
 
@@ -378,21 +375,25 @@ public class SecondGenerationTraffic extends Traffic {
 	private final FirstGenerationTraffic firstGenerationTraffic;
 	private final ConcurrentMap<Type, GenerationState> states;
 	private final SwitchDistribution switchDistribution;
-
+	private final SeedGenerator seedGenerator;
+	
 	public SecondGenerationTraffic(long size, int loadBlocks,
 			int preloadWindow, Distribution uniqueDistribution,
 			Distribution internalRedundantDistribution,
 			Distribution temporalRedundantDistribution,
 			SwitchDistribution switchDistribution,
-			FirstGenerationTraffic firstGenerationTraffic) {
+			FirstGenerationTraffic firstGenerationTraffic,
+			SeedGenerator seedGenerator) throws Exception {
 		super(loadBlocks, preloadWindow);
 		Preconditions.checkNotNull(switchDistribution);
 		Preconditions.checkNotNull(firstGenerationTraffic);
+		
+		this.seedGenerator = seedGenerator;
 
 		GenerationState uniqueState = new GenerationState(uniqueDistribution,
 				new Generation2UniqueData(new UniqueData()));
 
-		Random initialRedundantRandom = new XORShiftRandomGenerator();
+		Random initialRedundantRandom = new MersenneTwisterRNG(seedGenerator);
 		RedundantData redundantDataGenerator = new RedundantData(2 * 1024,
 				32 * 1024, initialRedundantRandom);
 
@@ -414,8 +415,6 @@ public class SecondGenerationTraffic extends Traffic {
 			throw new IllegalArgumentException("file too large");
 		}
 		this.blockCount = (int) blockCount;
-
-		logger.info(String.format("Size %s, block count %s", size, blockCount));
 
 		blocks = new AtomicReferenceArray<ByteBuffer>((int) blockCount);
 		block_state = new AtomicReferenceArray<Future<Boolean>>(

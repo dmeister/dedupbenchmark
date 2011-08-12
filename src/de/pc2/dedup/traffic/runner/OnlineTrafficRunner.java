@@ -1,5 +1,6 @@
 package de.pc2.dedup.traffic.runner;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -12,6 +13,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
+import org.uncommons.maths.random.DevRandomSeedGenerator;
+import org.uncommons.maths.random.SeedGenerator;
 
 import com.hazelcast.core.Hazelcast;
 
@@ -19,6 +22,7 @@ import de.pc2.dedup.traffic.runner.dist.BlockAlignedDistribtion;
 import de.pc2.dedup.traffic.runner.dist.DistUtil;
 import de.pc2.dedup.traffic.runner.dist.Distribution;
 import de.pc2.dedup.traffic.runner.dist.SwitchDistribution;
+import de.pc2.dedup.traffic.runner.util.FileSeedGenerator;
 import de.pc2.dedup.traffic.runner.util.StorageUnit;
 
 /**
@@ -91,6 +95,15 @@ public class OnlineTrafficRunner {
 				signal);
 	}
 
+	private static SeedGenerator getSeedGenerator(String filename) throws Exception {
+		File f = new File(filename);
+		if (f.exists()) {
+			logger.info("Using seed file " + filename);
+			return new FileSeedGenerator(filename);
+		}
+		return new DevRandomSeedGenerator();
+	}
+	
 	/**
 	 * @param args
 	 * @throws Exception
@@ -138,7 +151,11 @@ public class OnlineTrafficRunner {
 				firstGenerationData = false;
 			}
 		}
+		
+		logger.info(String.format("Size: %s", size));
 		logger.info(String.format("Threads: %s", threadCount));
+
+		SeedGenerator firstGenerationSeed = getSeedGenerator("seeds/first_generation.seed");
 		Distribution redundantDistribution = new BlockAlignedDistribtion(
 				4 * 1024, DistUtil.loadEmpiricalData(
 						"data/upb-6-rabin8-redundant-bulk-list.csv", 0.999));
@@ -147,12 +164,13 @@ public class OnlineTrafficRunner {
 						"data/upb-6-rabin8-unique-bulk-list.csv", 0.999));
 		FirstGenerationTraffic firstGenerationTraffic = new FirstGenerationTraffic(
 				size, loadBlocks, preloadWindow, uniqueDistribution,
-				redundantDistribution, !firstGenerationData);
+				redundantDistribution, firstGenerationSeed, !firstGenerationData);
 
 		Traffic traffic = null;
 		if (firstGenerationData) {
 			traffic = firstGenerationTraffic;
 		} else {
+			SeedGenerator secondGenerationSeed = getSeedGenerator("seeds/second_generation.seed");
 			Distribution secondGenerationUniqueDistribution = new BlockAlignedDistribtion(
 					4 * 1024, DistUtil.loadEmpiricalData(
 							"data/upb-6-rabin8-unique-bulk-list.csv", 0.999));
@@ -173,7 +191,7 @@ public class OnlineTrafficRunner {
 					secondGenerationUniqueDistribution,
 					internalRedundantDistribution,
 					temporalRedundantDistribution, switchDistribution,
-					firstGenerationTraffic);
+					firstGenerationTraffic, secondGenerationSeed);
 			traffic = secondGenerationTraffic;
 		}
 
