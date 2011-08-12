@@ -1,0 +1,158 @@
+package de.pc2.dedup.traffic.runner;
+
+import java.io.FileOutputStream;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Application class of the traffic runner.
+ * 
+ * @author dirkmeister
+ *
+ */
+public class TrafficRunner {
+	
+	static long statisticGranularty;
+	
+	
+	public static long getStatisticGranularty() {
+		return statisticGranularty;
+	}
+
+	/**
+	 * Factory method for the traffic runnable.
+	 * @param randomIO
+	 * @param traffic
+	 * @param channel
+	 * @param start
+	 * @param end
+	 * @return
+	 */
+	protected static TrafficRunnable getTrafficRunnable(boolean randomIO, Traffic traffic, FileChannel channel,int start,int end) {
+		if(randomIO) {
+			return new RandomTrafficRunnable(traffic, channel, start, end);
+		} else {
+			return new SequentialTrafficRunnable(traffic, channel, start, end);
+		}
+	}
+	
+	/**
+	 * @param args
+	 * @throws Exception 
+	 */
+	public static void main(String[] args) throws Exception {
+		if(args.length < 2) {
+			System.err.println("Illegal arguments");
+			System.exit(1);
+		}
+		String trafficFile = args[0];
+		String destination = args[1];
+                System.out.println("Traffic file: " + trafficFile);
+                System.out.println("Destination: " + destination);
+		int threadCount = 1;
+		boolean randomIO = false;
+		String backgroundProcess = null;
+		int loadBlocks = 256; // preload size per thread in blocks
+		int preloadWindow = 2;
+		statisticGranularty = 10; // in seconds
+		
+		for(int i = 2; i < args.length;i++) {
+			if(args[i].startsWith("-t=")) {
+				threadCount = Integer.parseInt(args[i].substring("-t=".length()));
+			}
+			if(args[i].startsWith("-l=")) {
+				loadBlocks = Integer.parseInt(args[i].substring("-l=".length()));
+			}	
+			if(args[i].startsWith("-p=")) {
+				preloadWindow = Integer.parseInt(args[i].substring("-p=".length()));
+			}	
+			if(args[i].startsWith("-g=")) {
+				statisticGranularty = Long.parseLong(args[i].substring("-g=".length()));
+			}	
+			if(args[i].equals("--random")) {
+				randomIO = true;
+			}
+			if(args[i].startsWith("-b=")) {
+				backgroundProcess = args[i].substring("-b=".length());
+			}
+		}
+		
+		System.out.println("Threads: " + threadCount);
+		System.out.println("Traffic type: " + (randomIO ? "random" : "seq"));
+		
+		Traffic traffic = new Traffic(trafficFile, loadBlocks, preloadWindow);
+		
+		List<TrafficRunnable> threads = new ArrayList<TrafficRunnable>();
+		int blockCount = traffic.getBlockCount();
+		int blockShare = blockCount / threadCount;
+		FileOutputStream outputStream = new FileOutputStream(destination);
+		FileChannel channel = outputStream.getChannel();
+		for(int i = 0; i < threadCount;i++) {
+			int start = i * blockShare;
+			int end = (i+1) * blockShare;
+			if(end > blockCount) {
+				end = blockCount;
+			}
+			threads.add(getTrafficRunnable(randomIO, traffic, channel, start, end));
+		}
+		
+		Process process = null;
+		if(backgroundProcess != null) {
+			process = new ProcessBuilder().command(backgroundProcess.split("\\w")).start();
+		}
+		for(TrafficRunnable t : threads) {
+			t.preload();
+		}
+		long startTime = System.currentTimeMillis();
+		for(TrafficRunnable t : threads) {
+			t.start();
+		}
+		for(TrafficRunnable t : threads) {
+			t.join();
+		}
+        
+		channel.force(true);
+        outputStream.close();
+        if(process != null) {
+        	process.destroy();
+        }
+		long endTime = System.currentTimeMillis();
+		
+		long runMillis = endTime - startTime;
+		int blocks = 0;
+		for(TrafficRunnable t : threads) {
+			blocks += t.getBlocksWritten();
+			if(!t.isSuccessful() || !t.isFinished()) {
+				System.out.println("Illegal Run");
+				return;
+			}
+		}
+		long mb = 1L * blocks * Traffic.BLOCK_SIZE / (1024*1024);
+		double mbs = 1000.0 * mb / runMillis;
+		System.out.printf("Time: %s ms%n", runMillis);
+		System.out.printf("MB: %s MB%n", mb);
+		System.out.printf("MB/s: %s MB/s%n", mbs);
+		System.out.printf("Waiting: %s, %s s%n", traffic.getWaits(), traffic.getWaitTime() / 1000);
+		System.out.printf("MB/s: %s MB/s%n", mbs);
+		LinkedHashMap<Long, Integer> statistics = new LinkedHashMap<Long, Integer>();
+		for(TrafficRunnable t : threads) {
+			LinkedHashMap<Long, Integer> thread_statistics = t.getStatistics();
+			for(Map.Entry<Long, Integer> e : thread_statistics.entrySet()) {
+				if (statistics.containsKey(e.getKey()) == false) {
+					statistics.put(e.getKey(), 0);
+				}
+				statistics.put(e.getKey(), statistics.get(e.getKey()) + e.getValue());
+			}
+		}
+		for(Map.Entry<Long, Integer> e : statistics.entrySet()) {
+			double stat_mb = 1L* e.getValue() * Traffic.BLOCK_SIZE;
+			double stat_mbs = stat_mb / (1024 * 1024 * statisticGranularty);
+			System.out.println("Second " + (e.getKey() * statisticGranularty) + " s: " + stat_mbs + " MB/s");
+		}
+		traffic.close();
+	}
+
+}

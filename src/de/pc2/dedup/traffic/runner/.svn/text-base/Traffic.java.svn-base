@@ -1,0 +1,166 @@
+package de.pc2.dedup.traffic.runner;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReferenceArray;
+
+public class Traffic {
+	public static final int BLOCK_SIZE = 1024 * 1024;
+	
+	private final int loadBlocks;
+	private final int preloadWindow;
+	private final File file;
+	private final long size;
+	private AtomicReferenceArray<Future<Boolean> > block_state;
+	private AtomicReferenceArray<ByteBuffer> blocks;
+	private FileInputStream stream;
+	private FileChannel channel;
+	private ExecutorService executor = Executors.newFixedThreadPool(8);
+	private final AtomicLong waits = new AtomicLong(0);
+	
+	public long getWaits() {
+		return waits.get();
+	}
+
+	public long getWaitTime() {
+		return waitTime.get();
+	}
+
+	private final AtomicLong waitTime = new AtomicLong(0);
+	private ConcurrentLinkedQueue<ByteBuffer> bufferQueue = new ConcurrentLinkedQueue<ByteBuffer>();
+
+
+	public class LoadJob implements Callable<Boolean> {
+		private final int index;
+		public LoadJob(int index) {
+			this.index = index;
+		}
+		public int getIndex() {
+			return this.index;
+		}
+		public Boolean call() throws Exception {
+			for(int i = index; i < index + getLoadBlocks(); i++) {
+				if(i >= blocks.length()) {
+					break;
+				}
+				long pos = ((long)i) * BLOCK_SIZE;
+				//System.out.println("Loading block "  + i);
+				
+				ByteBuffer block = bufferQueue.poll();
+				if(block == null) {
+					block = ByteBuffer.allocate((int) BLOCK_SIZE);
+				}
+				channel.read(block, pos);
+				block.flip();
+
+				blocks.set(i, block);		
+				//System.out.println("Loaded block "  + i);
+			}
+			//System.out.println("Finished preloading block "  + index);
+			return true;
+		}
+	}
+
+	public Traffic(String filename, int loadBlocks, int preloadWindow) throws FileNotFoundException {
+		this.loadBlocks = loadBlocks;
+		this.preloadWindow = preloadWindow;
+		this.file = new File(filename);
+		this.size = file.length();
+		this.stream = new FileInputStream(file);
+		this.channel = stream.getChannel();
+		System.out.println("File length " + this.size);
+
+		long blockCount = (long)Math.ceil(1.0 * size / (BLOCK_SIZE));
+		if(blockCount > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException("file too large");
+		}
+		blocks = new AtomicReferenceArray<ByteBuffer>((int) blockCount);
+		block_state = new AtomicReferenceArray<Future<Boolean>>((int) blockCount);
+	}
+
+	public synchronized Future<Boolean> loadBuffer(int i) throws Exception {
+		if(i >= blocks.length()) {
+			return null;
+		}
+		Future<Boolean> f = this.block_state.get(i);
+		if(f != null) {
+			return f;
+		}
+		//System.out.println("Submit load job " + i);
+		f = this.executor.submit(new LoadJob(i));
+		for(int j = i; j < i + getLoadBlocks(); j++) {
+			if(j >= blocks.length()) {
+				break;
+			}
+			this.block_state.set(j, f);
+		}
+		return f;
+	}
+
+	public int getBlockCount() {
+		return blocks.length();
+	}
+
+	public ByteBuffer getBuffer(int i) throws Exception {	
+		ByteBuffer b = this.blocks.get(i);
+		if(b == null) {
+			Future<Boolean> f = this.block_state.get(i);		
+			if(f == null) {
+				f = loadBuffer(i);	
+				this.waits.incrementAndGet();
+				long waitStart = System.currentTimeMillis();
+				f.get();
+				long waitEnd = System.currentTimeMillis();
+				this.waitTime.addAndGet((waitEnd - waitStart));
+				//System.out.println("Waiting");
+			} else if (f.isDone() == false) {
+				this.waits.incrementAndGet();
+				long waitStart = System.currentTimeMillis();
+				f.get();
+				long waitEnd = System.currentTimeMillis();
+				this.waitTime.addAndGet((waitEnd - waitStart));
+				//System.out.println("Waiting");
+			}
+			b = this.blocks.get(i);
+		}
+		if(i % getLoadBlocks() == 0) {
+			int preloadIndex = i + (getLoadBlocks() * getPreloadWindow());
+			//System.out.println("Preloading block " + preloadIndex + " at block " + i);
+			Future<Boolean> f2 = this.executor.submit(new LoadJob(preloadIndex));
+
+			this.block_state.set(i, f2);
+		}
+		return b;
+	}
+
+	public void clearBuffer(int i) {	
+		ByteBuffer b = this.blocks.get(i);
+		if (b != null) {
+			b.flip();
+			this.bufferQueue.offer(b);
+		}
+		blocks.set(i, null);
+		block_state.set(i, null);
+	}
+
+	public void close() {
+		this.executor.shutdown();
+	}
+	
+	public int getLoadBlocks() {
+		return loadBlocks;
+	}
+
+	public int getPreloadWindow() {
+		return preloadWindow;
+	}
+} 
