@@ -43,7 +43,7 @@ if __name__ == "__main__":
     else:
         cmd_args.append("-Xmx1G")
     
-    cmd_args.extend(["-server", "-cp",":".join(get_cp()), java_class])
+    cmd_args.extend(["-cp",":".join(get_cp()), java_class])
     cmd_args.extend(sys.argv[1:])
     
     cmd = " ".join(cmd_args)
