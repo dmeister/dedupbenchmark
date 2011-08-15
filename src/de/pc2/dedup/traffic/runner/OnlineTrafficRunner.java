@@ -236,6 +236,7 @@ public class OnlineTrafficRunner {
 			t.close();
 		}
 
+                logger.info("Finished writing. Flushing");
 		try {
 			channel.force(true);
 		} catch (IOException e) {
@@ -245,6 +246,7 @@ public class OnlineTrafficRunner {
 		if (process != null) {
 			process.destroy();
 		}
+                logger.info("Finished");
 		long endTime = System.currentTimeMillis();
 
 		long runMillis = endTime - startTime;

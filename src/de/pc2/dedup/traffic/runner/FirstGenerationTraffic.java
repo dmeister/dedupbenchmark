@@ -20,6 +20,7 @@ import de.pc2.dedup.traffic.runner.data.Data;
 import de.pc2.dedup.traffic.runner.data.RedundantData;
 import de.pc2.dedup.traffic.runner.data.UniqueData;
 import de.pc2.dedup.traffic.runner.dist.Distribution;
+import de.pc2.dedup.traffic.runner.util.StorageUnit;
 
 public class FirstGenerationTraffic extends Traffic {
 
@@ -124,6 +125,7 @@ public class FirstGenerationTraffic extends Traffic {
 									uniqueRandomData);
 							uniqueDataSize.addAndGet(bulkLenght);
 							uniqueBulks.incrementAndGet();
+                                                        assignedSize -= bulkLenght;
 						}
 					} else if (type == Type.REDUNDANT) {
 						long bulkLenght = assignedSize;
@@ -137,9 +139,9 @@ public class FirstGenerationTraffic extends Traffic {
 									(int) bulkLenght, redundantRandomData);
 							redundantDataSize.addAndGet(bulkLenght);
 							redundantBulks.incrementAndGet();
+                                                        assignedSize -= bulkLenght;
 						}
 					}
-					assignedSize = 0;
 				}
 				while (block.remaining() > 0) {
 					Type nextType = switchType();
@@ -156,6 +158,8 @@ public class FirstGenerationTraffic extends Traffic {
 						if (bulkLenght > 0) {
 							uniqueDataGenerator.getBulkData(block, (int) bulkLenght,
 									uniqueRandomData);
+							uniqueDataSize.addAndGet(bulkLenght);
+							uniqueBulks.incrementAndGet();                                                
 						}
 					} else if (type == Type.REDUNDANT) {
 						long bulkLenght = redundantDistribution
@@ -303,8 +307,8 @@ public class FirstGenerationTraffic extends Traffic {
 	}
 
 	public void close() {
-		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), uniqueDataSize.get()));
-		logger.info(String.format("Redundant %s, %s Bytes", redundantBulks.get(), redundantDataSize.get()));
+		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), StorageUnit.formatUnit(uniqueDataSize.get())));
+		logger.info(String.format("Redundant %s, %s Bytes", redundantBulks.get(), StorageUnit.formatUnit(redundantDataSize.get())));
 	}
 
 	public int getBlockCount() {
