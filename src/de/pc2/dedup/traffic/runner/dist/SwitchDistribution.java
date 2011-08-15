@@ -97,6 +97,7 @@ public class SwitchDistribution {
 
 		for (Map.Entry<TypePair, Integer> entry : countMap.entrySet()) {
 			SwitchTypeDistribution std = map.get(entry.getKey().first);
+			Preconditions.checkNotNull(std);
 
 			std.count += entry.getValue();
 			std.count_map.put(entry.getKey().second, std.count);

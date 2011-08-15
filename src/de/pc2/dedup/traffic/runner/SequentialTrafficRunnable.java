@@ -55,15 +55,12 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 	}
 
 	public void preload() throws Exception {
-		int preloadEndIndex = startindex
-				+ (getTraffic().getLoadBlocks() * getTraffic()
-						.getPreloadWindow());
+		int preloadEndIndex = startindex + (getTraffic().getPreloadWindow());
 
 		logger.debug(String
 				.format("Preload %s:%s", startindex, preloadEndIndex));
 
-		for (int i = startindex; i < preloadEndIndex; i += getTraffic()
-				.getLoadBlocks()) {
+		for (int i = startindex; i < preloadEndIndex; i ++) {
 			if (i >= getTraffic().getBlockCount()) {
 				break;
 			}

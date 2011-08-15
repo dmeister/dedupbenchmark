@@ -2,6 +2,7 @@ package de.pc2.dedup.traffic.runner;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -119,7 +120,6 @@ public class OnlineTrafficRunner {
 		logger.info(String.format("Destination: %s", destination));
 		int threadCount = 1;
 		String backgroundProcess = null;
-		int loadBlocks = 8; // preload size per thread in blocks
 		int preloadWindow = 8;
 		long size = 0;
 		boolean clusterDiscovery = false;
@@ -129,10 +129,6 @@ public class OnlineTrafficRunner {
 			if (args[i].startsWith("-t=")) {
 				threadCount = Integer
 						.parseInt(args[i].substring("-t=".length()));
-			}
-			if (args[i].startsWith("-l=")) {
-				loadBlocks = Integer
-						.parseInt(args[i].substring("-l=".length()));
 			}
 			if (args[i].startsWith("-p=")) {
 				preloadWindow = Integer.parseInt(args[i].substring("-p="
@@ -163,7 +159,7 @@ public class OnlineTrafficRunner {
 				DistUtil.loadEmpiricalData(
 						"data/upb-6-rabin8-unique-bulk-list.csv", 0.999));
 		FirstGenerationTraffic firstGenerationTraffic = new FirstGenerationTraffic(
-				size, loadBlocks, preloadWindow, uniqueDistribution,
+				size, preloadWindow, uniqueDistribution,
 				redundantDistribution, firstGenerationSeed, !firstGenerationData);
 
 		Traffic traffic = null;
@@ -187,7 +183,7 @@ public class OnlineTrafficRunner {
 			SwitchDistribution switchDistribution = SwitchDistribution
 					.loadSwitchDistribution("data/upb-6-rabin8-switch-stats.csv");
 			SecondGenerationTraffic secondGenerationTraffic = new SecondGenerationTraffic(
-					size, loadBlocks, preloadWindow,
+					size, preloadWindow,
 					secondGenerationUniqueDistribution,
 					internalRedundantDistribution,
 					temporalRedundantDistribution, switchDistribution,
@@ -240,7 +236,11 @@ public class OnlineTrafficRunner {
 			t.close();
 		}
 
-		channel.force(true);
+		try {
+			channel.force(true);
+		} catch (IOException e) {
+			// ignore
+		}
 		outputStream.close();
 		if (process != null) {
 			process.destroy();

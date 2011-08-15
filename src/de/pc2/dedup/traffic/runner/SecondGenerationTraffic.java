@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.apache.log4j.Logger;
@@ -157,10 +158,9 @@ public class SecondGenerationTraffic extends Traffic {
 			this.executor.shutdown();
 		}
 
-		private boolean generateData(int index) throws Exception {			
-			for (int i = index; i < index + getLoadBlocks(); i++) {
+		private boolean generateData(int i) throws Exception {		
 				if (i >= endIndex) {
-					break;
+					return true;
 				}
 				
 				logger.debug("Generating block " + i);
@@ -234,9 +234,8 @@ public class SecondGenerationTraffic extends Traffic {
 				block.flip();
 				blocks.set(i, block);
 				logger.debug("Generated block " + i);
-			}
+		
 			return true;
-
 		}
 
 		public int getBlockCount() {
@@ -261,8 +260,8 @@ public class SecondGenerationTraffic extends Traffic {
 				b = blocks.get(i);
 			}
 			Preconditions.checkState(b != null);
-			if (i % getLoadBlocks() == 0) {
-				int preloadIndex = i + (getLoadBlocks() * getPreloadWindow());
+			
+				int preloadIndex = i + getPreloadWindow();
 				if (preloadIndex < endIndex) {
 					logger.debug(String.format(
 							"Preloading block %s at block %s", preloadIndex, i));
@@ -271,7 +270,7 @@ public class SecondGenerationTraffic extends Traffic {
 							preloadIndex));
 					block_state.set(preloadIndex, f2);
 				}
-			}
+			
 			return b;
 		}
 
@@ -291,13 +290,7 @@ public class SecondGenerationTraffic extends Traffic {
 				return f;
 			}
 			f = executor.submit(new GenerateJob(i));
-
-			for (int j = i; j < i + getLoadBlocks(); j++) {
-				if (j >= blocks.length()) {
-					break;
-				}
-				block_state.set(j, f);
-			}
+			block_state.set(i, f);
 			return f;
 		}
 
@@ -377,14 +370,21 @@ public class SecondGenerationTraffic extends Traffic {
 	private final SwitchDistribution switchDistribution;
 	private final SeedGenerator seedGenerator;
 	
-	public SecondGenerationTraffic(long size, int loadBlocks,
+	private final AtomicLong internalRedundantBulks = new AtomicLong();
+	private final AtomicLong internalRedundantDataSize = new AtomicLong();
+	private final AtomicLong temporalRedundantBulks = new AtomicLong();
+	private final AtomicLong temporalRedundantDataSize = new AtomicLong();
+	private final AtomicLong uniqueBulks = new AtomicLong();
+	private final AtomicLong uniqueDataSize = new AtomicLong();
+	
+	public SecondGenerationTraffic(long size,
 			int preloadWindow, Distribution uniqueDistribution,
 			Distribution internalRedundantDistribution,
 			Distribution temporalRedundantDistribution,
 			SwitchDistribution switchDistribution,
 			FirstGenerationTraffic firstGenerationTraffic,
 			SeedGenerator seedGenerator) throws Exception {
-		super(loadBlocks, preloadWindow);
+		super(preloadWindow);
 		Preconditions.checkNotNull(switchDistribution);
 		Preconditions.checkNotNull(firstGenerationTraffic);
 		
@@ -422,6 +422,9 @@ public class SecondGenerationTraffic extends Traffic {
 	}
 
 	public void close() {
+		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), uniqueDataSize.get()));
+		logger.info(String.format("Internal Redundant %s, %s Bytes", internalRedundantBulks.get(), internalRedundantDataSize.get()));
+		logger.info(String.format("Temporal Redundant %s, %s Bytes", temporalRedundantBulks.get(), temporalRedundantDataSize.get()));
 	}
 
 	public int getBlockCount() {
