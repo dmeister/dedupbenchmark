@@ -169,7 +169,7 @@ public class OnlineTrafficRunner {
 			SeedGenerator secondGenerationSeed = getSeedGenerator("seeds/second_generation.seed");
 			Distribution secondGenerationUniqueDistribution = new BlockAlignedDistribtion(
 					4 * 1024, DistUtil.loadEmpiricalData(
-							"data/upb-6-rabin8-unique-bulk-list.csv", 0.999));
+							"data/upb-6-rabin8-temporal-unique-bulk-list.csv", 0.999));
 			Distribution internalRedundantDistribution = new BlockAlignedDistribtion(
 					4 * 1024,
 					DistUtil.loadEmpiricalData(

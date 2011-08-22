@@ -22,6 +22,7 @@ import de.pc2.dedup.traffic.runner.data.RedundantData;
 import de.pc2.dedup.traffic.runner.data.UniqueData;
 import de.pc2.dedup.traffic.runner.dist.Distribution;
 import de.pc2.dedup.traffic.runner.dist.SwitchDistribution;
+import de.pc2.dedup.traffic.runner.util.StorageUnit;
 
 public class SecondGenerationTraffic extends Traffic {
 
@@ -217,6 +218,8 @@ public class SecondGenerationTraffic extends Traffic {
 						dataRandom = temporalRedundantRandomData;
 						lengthRandom = temporalRedundantRandom;
 					}
+					
+					logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulk)))
 
 					long bulkLenght = typeState.dist.getNext(lengthRandom);
 					if (bulkLenght > block.remaining()) {
