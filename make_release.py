@@ -4,6 +4,7 @@ import os
 import tarfile
 
 version = "1.0"
+os.system("sbt package")
 
 if os.path.exists("dist/lib"):
     shutil.rmtree("dist/lib")

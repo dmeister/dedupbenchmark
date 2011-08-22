@@ -179,12 +179,20 @@ public class SecondGenerationTraffic extends Traffic {
 				if (assignedSize > 0) {
 					GenerationState typeState = states.get(type);
 					Random dataRandom = null;
+                                        AtomicLong statsBulks = null;
+                                        AtomicLong statsDataSize = null;
 					if (type == Type.UNIQUE) {
 						dataRandom = uniqueRandomData;
+                                                statsBulks = uniqueBulks;
+                                                statsDataSize = uniqueDataSize;
 					} else if (type == Type.INTERNALREDUNDANT) {
 						dataRandom = internalRedundantRandomData;
+                                                statsBulks = internalRedundantBulks;
+                                                statsDataSize = internalRedundantDataSize;
 					} else if (type == Type.TEMPORAL_REDUNDANT) {
 						dataRandom = temporalRedundantRandom;
+                                                statsBulks = temporalRedundantBulks;
+                                                statsDataSize = temporalRedundantDataSize;
 					}
 
 					long bulkLenght = assignedSize;
@@ -192,12 +200,15 @@ public class SecondGenerationTraffic extends Traffic {
 						assignedSize = (bulkLenght - block.remaining());
 						bulkLenght = block.remaining();
 					}
+                                        logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
+
 					if (bulkLenght > 0) {
 						typeState.data.getBulkData(block, (int) bulkLenght,
 								dataRandom, firstGenerationBlock);
+                                                statsBulks.incrementAndGet();
+                                                statsDataSize.addAndGet(bulkLenght);
+                                                assignedSize -= bulkLenght;
 					}
-
-					assignedSize = 0;
 				}
 				while (block.remaining() > 0) {
 					type = getNextType(type);
@@ -208,27 +219,40 @@ public class SecondGenerationTraffic extends Traffic {
 
 					Random dataRandom = null;
 					Random lengthRandom = null;
+                                        AtomicLong statsBulks = null;
+                                        AtomicLong statsDataSize = null;
+
 					if (type == Type.UNIQUE) {
 						dataRandom = uniqueRandomData;
 						lengthRandom = uniqueRandom;
+                                            statsBulks = uniqueBulks;
+                                                statsDataSize = uniqueDataSize;
 					} else if (type == Type.INTERNALREDUNDANT) {
 						dataRandom = internalRedundantRandomData;
 						lengthRandom = internalRedundantRandom;
+                                                statsBulks = internalRedundantBulks;
+                                                statsDataSize = internalRedundantDataSize;
 					} else if (type == Type.TEMPORAL_REDUNDANT) {
 						dataRandom = temporalRedundantRandomData;
 						lengthRandom = temporalRedundantRandom;
+                                                 statsBulks = temporalRedundantBulks;
+                                                statsDataSize = temporalRedundantDataSize;
 					}
 					
 					logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulk)))
 
 					long bulkLenght = typeState.dist.getNext(lengthRandom);
+
 					if (bulkLenght > block.remaining()) {
 						assignedSize = (bulkLenght - block.remaining());
 						bulkLenght = block.remaining();
 					}
+                                        logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
 					if (bulkLenght > 0) {
 						typeState.data.getBulkData(block, (int) bulkLenght,
 								dataRandom, firstGenerationBlock);
+                                                statsBulks.incrementAndGet();
+                                                statsDataSize.addAndGet(bulkLenght);
 					}
 
 				}
@@ -425,9 +449,11 @@ public class SecondGenerationTraffic extends Traffic {
 	}
 
 	public void close() {
-		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), uniqueDataSize.get()));
-		logger.info(String.format("Internal Redundant %s, %s Bytes", internalRedundantBulks.get(), internalRedundantDataSize.get()));
-		logger.info(String.format("Temporal Redundant %s, %s Bytes", temporalRedundantBulks.get(), temporalRedundantDataSize.get()));
+            firstGenerationTraffic.close();
+
+		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), StorageUnit.formatUnit(uniqueDataSize.get())));
+		logger.info(String.format("Internal Redundant %s, %s Bytes", internalRedundantBulks.get(), StorageUnit.formatUnit(internalRedundantDataSize.get())));
+		logger.info(String.format("Temporal Redundant %s, %s Bytes", temporalRedundantBulks.get(), StorageUnit.formatUnit(temporalRedundantDataSize.get())));
 	}
 
 	public int getBlockCount() {
