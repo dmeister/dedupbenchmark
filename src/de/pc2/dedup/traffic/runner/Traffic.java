@@ -7,8 +7,6 @@ package de.pc2.dedup.traffic.runner;
  * 
  */
 public abstract class Traffic {
-	public static final int BLOCK_SIZE = 1024 * 1024;
-
 	private final int preloadWindow;
 
 	public Traffic(int preloadWindow) {

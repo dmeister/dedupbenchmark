@@ -90,9 +90,10 @@ public class OnlineTrafficRunner {
 	 * @throws Exception
 	 */
 	protected static TrafficRunnable getTrafficRunnable(Traffic traffic,
-			FileChannel channel, int start, int end, StartSignal signal)
+			FileChannel channel, int start, int end, int blockSize, StartSignal signal)
 			throws Exception {
 		return new SequentialTrafficRunnable(traffic, channel, start, end,
+				blockSize,
 				signal);
 	}
 
@@ -121,6 +122,7 @@ public class OnlineTrafficRunner {
 		int threadCount = 1;
 		String backgroundProcess = null;
 		int preloadWindow = 8;
+		int blockSize = 1024 * 1024;
 		long size = 0;
 		boolean clusterDiscovery = false;
 		boolean firstGenerationData = true;
@@ -137,6 +139,9 @@ public class OnlineTrafficRunner {
 			if (args[i].startsWith("-s=")) {
 				size = StorageUnit.parseUnit(args[i].substring("-s=".length()));
 			}
+			if (args[i].startsWith("-bs=")) {
+				blockSize = (int)StorageUnit.parseUnit(args[i].substring("-bs=".length()));
+			}
 			if (args[i].startsWith("-b=")) {
 				backgroundProcess = args[i].substring("-b=".length());
 			}
@@ -150,6 +155,7 @@ public class OnlineTrafficRunner {
 		
 		logger.info(String.format("Size: %s", size));
 		logger.info(String.format("Threads: %s", threadCount));
+		logger.info(String.format("Preload window: %s", preloadWindow));
 
 		SeedGenerator firstGenerationSeed = getSeedGenerator("seeds/first_generation.seed");
 		Distribution redundantDistribution = new BlockAlignedDistribtion(
@@ -159,7 +165,8 @@ public class OnlineTrafficRunner {
 				DistUtil.loadEmpiricalData(
 						"data/upb-6-rabin8-unique-bulk-list.csv", 0.999));
 		FirstGenerationTraffic firstGenerationTraffic = new FirstGenerationTraffic(
-				size, preloadWindow, uniqueDistribution,
+				size, blockSize, 
+				preloadWindow, uniqueDistribution,
 				redundantDistribution, firstGenerationSeed, !firstGenerationData);
 
 		Traffic traffic = null;
@@ -183,7 +190,8 @@ public class OnlineTrafficRunner {
 			SwitchDistribution switchDistribution = SwitchDistribution
 					.loadSwitchDistribution("data/upb-6-rabin8-switch-stats.csv");
 			SecondGenerationTraffic secondGenerationTraffic = new SecondGenerationTraffic(
-					size, preloadWindow,
+					size, blockSize,
+					preloadWindow,
 					secondGenerationUniqueDistribution,
 					internalRedundantDistribution,
 					temporalRedundantDistribution, switchDistribution,
@@ -210,7 +218,7 @@ public class OnlineTrafficRunner {
 			if (end > blockCount) {
 				end = blockCount;
 			}
-			threads.add(getTrafficRunnable(traffic, channel, start, end, signal));
+			threads.add(getTrafficRunnable(traffic, channel, start, end, blockSize, signal));
 		}
 
 		Process process = null;
@@ -236,7 +244,7 @@ public class OnlineTrafficRunner {
 			t.close();
 		}
 
-                logger.info("Finished writing. Flushing");
+        logger.info("Finished writing. Flushing");
 		try {
 			channel.force(true);
 		} catch (IOException e) {
@@ -246,7 +254,7 @@ public class OnlineTrafficRunner {
 		if (process != null) {
 			process.destroy();
 		}
-                logger.info("Finished");
+        logger.info("Finished");
 		long endTime = System.currentTimeMillis();
 
 		long runMillis = endTime - startTime;
@@ -258,7 +266,7 @@ public class OnlineTrafficRunner {
 				return;
 			}
 		}
-		long mb = 1L * blocks * Traffic.BLOCK_SIZE / (1024 * 1024);
+		long mb = 1L * blocks * blockSize / (1024 * 1024);
 		double mbs = 1000.0 * mb / runMillis;
 		logger.info(String.format("Time: %s ms%n", runMillis));
 		logger.info(String.format("MB: %s MB%n", mb));
@@ -276,7 +284,7 @@ public class OnlineTrafficRunner {
 			}
 		}
 		for (Map.Entry<Long, Integer> e : statistics.entrySet()) {
-			double stat_mb = 1L * e.getValue() * Traffic.BLOCK_SIZE;
+			double stat_mb = 1L * e.getValue() * blockSize;
 			double stat_mbs = stat_mb / (1024 * 1024 * 10);
 			logger.info(String.format("Second %s s: %s MB/s",
 					(e.getKey() * 10), stat_mbs));

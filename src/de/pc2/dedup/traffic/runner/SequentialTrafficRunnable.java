@@ -21,17 +21,19 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 	private StartSignal signal;
 	private final int startindex;
 	private long startTime = 0;
+	private final int blockSize;
 	private LinkedHashMap<Long, Integer> statistics = new LinkedHashMap<Long, Integer>();
 
 	private volatile boolean successful = false;
 
 	public SequentialTrafficRunnable(Traffic traffic, FileChannel channel,
-			int startindex, int endindex, StartSignal signal) throws Exception {
+			int startindex, int endindex, int blockSize, StartSignal signal) throws Exception {
 		super(traffic, channel);
 		session = traffic.getSession(startindex, endindex);
 		this.startindex = startindex;
 		this.endindex = endindex;
 		this.signal = signal;
+		this.blockSize = blockSize;
 	}
 
 	public void close() {
@@ -72,7 +74,6 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 	public void run() {
 		int i = 0;
 		try {
-
 			signal.await();
 
 			this.startTime = System.currentTimeMillis();
@@ -80,7 +81,9 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 				logger.debug(String.format("Writing block %s", i));
 				ByteBuffer block = session.getBuffer(i);
 				Preconditions.checkState(block != null);
-				long pos = ((long) i) * Traffic.BLOCK_SIZE;
+				Preconditions.checkState(block.remaining() == blockSize);
+				long pos = ((long) i) * blockSize;
+				
 				getChannel().write(block, pos);
 				blocksWritten++;
 

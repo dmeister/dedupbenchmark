@@ -37,9 +37,9 @@ public class SecondGenerationTraffic extends Traffic {
 		public void getBulkData(ByteBuffer buf, int length,
 				Random random_state,
 				ByteBuffer firstGenerationBlock)
-				throws Exception {
+						throws Exception {
 			redundantData.getBulkData(buf, length, random_state);
-			
+
 			logger.debug(String.format("Skip %s bytes from %s", length, firstGenerationBlock));
 			firstGenerationBlock.position(firstGenerationBlock.position() + length);
 		}
@@ -48,7 +48,7 @@ public class SecondGenerationTraffic extends Traffic {
 		public String toString() {
 			StringBuilder builder = new StringBuilder();
 			builder.append("Generation2RedundantData [redundantData=")
-					.append(redundantData).append("]");
+			.append(redundantData).append("]");
 			return builder.toString();
 		}
 	}
@@ -64,7 +64,7 @@ public class SecondGenerationTraffic extends Traffic {
 				Random random_state,
 				ByteBuffer firstGenerationBlock) throws Exception {
 			uniqueData.getBulkData(buf, length, random_state);
-			
+
 			logger.debug(String.format("Skip %s bytes from %s", length, firstGenerationBlock));
 			firstGenerationBlock.position(firstGenerationBlock.position() + length);
 		}
@@ -73,7 +73,7 @@ public class SecondGenerationTraffic extends Traffic {
 		public String toString() {
 			StringBuilder builder = new StringBuilder();
 			builder.append("Generation2UniqueData [uniqueData=")
-					.append(uniqueData).append("]");
+			.append(uniqueData).append("]");
 			return builder.toString();
 		}
 	}
@@ -94,7 +94,7 @@ public class SecondGenerationTraffic extends Traffic {
 		public String toString() {
 			StringBuilder builder = new StringBuilder();
 			builder.append("GenerationState [dist=").append(dist)
-					.append(", data=").append(data).append("]");
+			.append(", data=").append(data).append("]");
 			return builder.toString();
 		}
 	}
@@ -113,8 +113,7 @@ public class SecondGenerationTraffic extends Traffic {
 		}
 
 		private final int endIndex;
-		private final ExecutorService executor = Executors
-				.newFixedThreadPool(1);
+		private final ExecutorService executor = Executors.newSingleThreadExecutor();
 		private final TrafficSession firstGenerationTrafficSession;
 		private Random internalRedundantRandom;
 		private Random internalRedundantRandomData;
@@ -156,112 +155,111 @@ public class SecondGenerationTraffic extends Traffic {
 		}
 
 		public void close() {
+			firstGenerationTrafficSession.close();
 			this.executor.shutdown();
 		}
 
 		private boolean generateData(int i) throws Exception {		
-				if (i >= endIndex) {
-					return true;
+			if (i >= endIndex) {
+				return true;
+			}
+
+			logger.debug("Generating block " + i);
+
+			ByteBuffer block = bufferQueue.poll();
+			if (block == null) {
+				block = ByteBuffer.allocate((int) blockSize);
+			}
+			ByteBuffer firstGenerationBlock = this.firstGenerationTrafficSession.getBuffer(i);
+
+			Preconditions.checkState(block != null);
+			Preconditions.checkState(firstGenerationBlock != null);
+			Preconditions.checkState(type != null);
+
+			if (assignedSize > 0) {
+				GenerationState typeState = states.get(type);
+				Random dataRandom = null;
+				AtomicLong statsBulks = null;
+				AtomicLong statsDataSize = null;
+				if (type == Type.UNIQUE) {
+					dataRandom = uniqueRandomData;
+					statsBulks = uniqueBulks;
+					statsDataSize = uniqueDataSize;
+				} else if (type == Type.INTERNALREDUNDANT) {
+					dataRandom = internalRedundantRandomData;
+					statsBulks = internalRedundantBulks;
+					statsDataSize = internalRedundantDataSize;
+				} else if (type == Type.TEMPORAL_REDUNDANT) {
+					dataRandom = temporalRedundantRandom;
+					statsBulks = temporalRedundantBulks;
+					statsDataSize = temporalRedundantDataSize;
 				}
-				
-				logger.debug("Generating block " + i);
 
-				ByteBuffer block = bufferQueue.poll();
-				if (block == null) {
-					block = ByteBuffer.allocate((int) BLOCK_SIZE);
+				long bulkLenght = assignedSize;
+				if (bulkLenght > block.remaining()) {
+					assignedSize = (bulkLenght - block.remaining());
+					bulkLenght = block.remaining();
 				}
-				ByteBuffer firstGenerationBlock = this.firstGenerationTrafficSession.getBuffer(i);
-	
-				Preconditions.checkState(block != null);
-				Preconditions.checkState(firstGenerationBlock != null);
-				Preconditions.checkState(type != null);
+				logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
 
-				if (assignedSize > 0) {
-					GenerationState typeState = states.get(type);
-					Random dataRandom = null;
-                                        AtomicLong statsBulks = null;
-                                        AtomicLong statsDataSize = null;
-					if (type == Type.UNIQUE) {
-						dataRandom = uniqueRandomData;
-                                                statsBulks = uniqueBulks;
-                                                statsDataSize = uniqueDataSize;
-					} else if (type == Type.INTERNALREDUNDANT) {
-						dataRandom = internalRedundantRandomData;
-                                                statsBulks = internalRedundantBulks;
-                                                statsDataSize = internalRedundantDataSize;
-					} else if (type == Type.TEMPORAL_REDUNDANT) {
-						dataRandom = temporalRedundantRandom;
-                                                statsBulks = temporalRedundantBulks;
-                                                statsDataSize = temporalRedundantDataSize;
-					}
-
-					long bulkLenght = assignedSize;
-					if (bulkLenght > block.remaining()) {
-						assignedSize = (bulkLenght - block.remaining());
-						bulkLenght = block.remaining();
-					}
-                                        logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
-
-					if (bulkLenght > 0) {
-						typeState.data.getBulkData(block, (int) bulkLenght,
-								dataRandom, firstGenerationBlock);
-                                                statsBulks.incrementAndGet();
-                                                statsDataSize.addAndGet(bulkLenght);
-                                                assignedSize -= bulkLenght;
-					}
+				if (bulkLenght > 0) {
+					typeState.data.getBulkData(block, (int) bulkLenght,
+							dataRandom, firstGenerationBlock);
+					statsBulks.incrementAndGet();
+					statsDataSize.addAndGet(bulkLenght);
+					assignedSize -= bulkLenght;
 				}
-				while (block.remaining() > 0) {
-					type = getNextType(type);
-					Preconditions.checkNotNull(type);
+			}
+			while (block.remaining() > 0) {
+				type = getNextType(type);
+				Preconditions.checkNotNull(type);
 
-					GenerationState typeState = states.get(type);
-					Preconditions.checkNotNull(typeState);
+				GenerationState typeState = states.get(type);
+				Preconditions.checkNotNull(typeState);
 
-					Random dataRandom = null;
-					Random lengthRandom = null;
-                                        AtomicLong statsBulks = null;
-                                        AtomicLong statsDataSize = null;
+				Random dataRandom = null;
+				Random lengthRandom = null;
+				AtomicLong statsBulks = null;
+				AtomicLong statsDataSize = null;
 
-					if (type == Type.UNIQUE) {
-						dataRandom = uniqueRandomData;
-						lengthRandom = uniqueRandom;
-                                            statsBulks = uniqueBulks;
-                                                statsDataSize = uniqueDataSize;
-					} else if (type == Type.INTERNALREDUNDANT) {
-						dataRandom = internalRedundantRandomData;
-						lengthRandom = internalRedundantRandom;
-                                                statsBulks = internalRedundantBulks;
-                                                statsDataSize = internalRedundantDataSize;
-					} else if (type == Type.TEMPORAL_REDUNDANT) {
-						dataRandom = temporalRedundantRandomData;
-						lengthRandom = temporalRedundantRandom;
-                                                 statsBulks = temporalRedundantBulks;
-                                                statsDataSize = temporalRedundantDataSize;
-					}
-					
-					logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulk)))
-
-					long bulkLenght = typeState.dist.getNext(lengthRandom);
-
-					if (bulkLenght > block.remaining()) {
-						assignedSize = (bulkLenght - block.remaining());
-						bulkLenght = block.remaining();
-					}
-                                        logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
-					if (bulkLenght > 0) {
-						typeState.data.getBulkData(block, (int) bulkLenght,
-								dataRandom, firstGenerationBlock);
-                                                statsBulks.incrementAndGet();
-                                                statsDataSize.addAndGet(bulkLenght);
-					}
-
+				if (type == Type.UNIQUE) {
+					dataRandom = uniqueRandomData;
+					lengthRandom = uniqueRandom;
+					statsBulks = uniqueBulks;
+					statsDataSize = uniqueDataSize;
+				} else if (type == Type.INTERNALREDUNDANT) {
+					dataRandom = internalRedundantRandomData;
+					lengthRandom = internalRedundantRandom;
+					statsBulks = internalRedundantBulks;
+					statsDataSize = internalRedundantDataSize;
+				} else if (type == Type.TEMPORAL_REDUNDANT) {
+					dataRandom = temporalRedundantRandomData;
+					lengthRandom = temporalRedundantRandom;
+					statsBulks = temporalRedundantBulks;
+					statsDataSize = temporalRedundantDataSize;
 				}
-				firstGenerationTrafficSession.clearBuffer(i);
-				// finished generate that block
-				block.flip();
-				blocks.set(i, block);
-				logger.debug("Generated block " + i);
-		
+
+				long bulkLenght = typeState.dist.getNext(lengthRandom);
+
+				if (bulkLenght > block.remaining()) {
+					assignedSize = (bulkLenght - block.remaining());
+					bulkLenght = block.remaining();
+				}
+				logger.debug(String.format("%s: %s byte", type, StorageUnit.formatUnit(bulkLenght)));
+				if (bulkLenght > 0) {
+					typeState.data.getBulkData(block, (int) bulkLenght,
+							dataRandom, firstGenerationBlock);
+					statsBulks.incrementAndGet();
+					statsDataSize.addAndGet(bulkLenght);
+				}
+
+			}
+			firstGenerationTrafficSession.clearBuffer(i);
+			// finished generate that block
+			block.flip();
+			blocks.set(i, block);
+			logger.debug("Generated block " + i);
+
 			return true;
 		}
 
@@ -270,34 +268,33 @@ public class SecondGenerationTraffic extends Traffic {
 		}
 
 		public ByteBuffer getBuffer(int i) throws Exception {
-			
+
 			logger.debug("Get buffer " + i);
-			
+
 			ByteBuffer b = blocks.get(i);
 			if (b == null) {
 				Future<Boolean> f = block_state.get(i);
 				if (f == null) {
 					f = loadBuffer(i);
 					f.get();
-					logger.warn("Waiting for block " + i);
+					logger.debug("Waiting for block " + i);
 				} else if (f.isDone() == false) {
 					f.get();
-					logger.warn("Waiting for block " + i);
+					logger.debug("Waiting for block " + i);
 				}
 				b = blocks.get(i);
 			}
 			Preconditions.checkState(b != null);
-			
-				int preloadIndex = i + getPreloadWindow();
-				if (preloadIndex < endIndex) {
-					logger.debug(String.format(
-							"Preloading block %s at block %s", preloadIndex, i));
 
-					Future<Boolean> f2 = executor.submit(new GenerateJob(
-							preloadIndex));
-					block_state.set(preloadIndex, f2);
-				}
-			
+			int preloadIndex = i + getPreloadWindow();
+			if (preloadIndex < endIndex) {
+				logger.debug(String.format("Preloading block %s at block %s", preloadIndex, i));
+
+				Future<Boolean> f2 = executor.submit(new GenerateJob(
+						preloadIndex));
+				block_state.set(preloadIndex, f2);
+			}
+
 			return b;
 		}
 
@@ -325,10 +322,10 @@ public class SecondGenerationTraffic extends Traffic {
 		public String toString() {
 			StringBuilder builder = new StringBuilder();
 			builder.append("OnlineGeneratedTrafficSession [startIndex=")
-					.append(startIndex).append(", endIndex=").append(endIndex)
-					.append(", firstGenerationTrafficSession=")
-					.append(firstGenerationTrafficSession)
-					.append("]");
+			.append(startIndex).append(", endIndex=").append(endIndex)
+			.append(", firstGenerationTrafficSession=")
+			.append(firstGenerationTrafficSession)
+			.append("]");
 			return builder.toString();
 		}
 
@@ -339,7 +336,7 @@ public class SecondGenerationTraffic extends Traffic {
 		public abstract void getBulkData(ByteBuffer buf, int length,
 				Random random_state,
 				ByteBuffer firstGenerationBlock)
-				throws Exception;
+						throws Exception;
 
 	}
 
@@ -351,10 +348,10 @@ public class SecondGenerationTraffic extends Traffic {
 		public void getBulkData(ByteBuffer buf, int length,
 				Random random_state,
 				ByteBuffer firstGenerationBlock)
-				throws Exception {
-			
+						throws Exception {
+
 			logger.debug(String.format("Get %s bytes from %s", length, firstGenerationBlock));
-			
+
 			buf.put(firstGenerationBlock.array(), firstGenerationBlock.arrayOffset()
 					+ firstGenerationBlock.position(), length);
 			firstGenerationBlock.position(firstGenerationBlock.position() + length);
@@ -389,6 +386,7 @@ public class SecondGenerationTraffic extends Traffic {
 
 	private final AtomicReferenceArray<Future<Boolean>> block_state;
 	private final int blockCount;
+	private final int blockSize;
 	private final AtomicReferenceArray<ByteBuffer> blocks;
 	private final ConcurrentLinkedQueue<ByteBuffer> bufferQueue = new ConcurrentLinkedQueue<ByteBuffer>();
 
@@ -396,15 +394,15 @@ public class SecondGenerationTraffic extends Traffic {
 	private final ConcurrentMap<Type, GenerationState> states;
 	private final SwitchDistribution switchDistribution;
 	private final SeedGenerator seedGenerator;
-	
+
 	private final AtomicLong internalRedundantBulks = new AtomicLong();
 	private final AtomicLong internalRedundantDataSize = new AtomicLong();
 	private final AtomicLong temporalRedundantBulks = new AtomicLong();
 	private final AtomicLong temporalRedundantDataSize = new AtomicLong();
 	private final AtomicLong uniqueBulks = new AtomicLong();
 	private final AtomicLong uniqueDataSize = new AtomicLong();
-	
-	public SecondGenerationTraffic(long size,
+
+	public SecondGenerationTraffic(long size, int blockSize,
 			int preloadWindow, Distribution uniqueDistribution,
 			Distribution internalRedundantDistribution,
 			Distribution temporalRedundantDistribution,
@@ -414,7 +412,8 @@ public class SecondGenerationTraffic extends Traffic {
 		super(preloadWindow);
 		Preconditions.checkNotNull(switchDistribution);
 		Preconditions.checkNotNull(firstGenerationTraffic);
-		
+
+		this.blockSize = blockSize;
 		this.seedGenerator = seedGenerator;
 
 		GenerationState uniqueState = new GenerationState(uniqueDistribution,
@@ -437,7 +436,7 @@ public class SecondGenerationTraffic extends Traffic {
 		this.switchDistribution = switchDistribution;
 		this.firstGenerationTraffic = firstGenerationTraffic;
 
-		long blockCount = (long) Math.ceil(1.0 * size / (BLOCK_SIZE));
+		long blockCount = (long) Math.ceil(1.0 * size / (blockSize));
 		if (blockCount > Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("file too large");
 		}
@@ -449,7 +448,7 @@ public class SecondGenerationTraffic extends Traffic {
 	}
 
 	public void close() {
-            firstGenerationTraffic.close();
+		firstGenerationTraffic.close();
 
 		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), StorageUnit.formatUnit(uniqueDataSize.get())));
 		logger.info(String.format("Internal Redundant %s, %s Bytes", internalRedundantBulks.get(), StorageUnit.formatUnit(internalRedundantDataSize.get())));

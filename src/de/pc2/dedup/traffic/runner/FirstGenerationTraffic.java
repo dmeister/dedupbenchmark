@@ -45,8 +45,7 @@ public class FirstGenerationTraffic extends Traffic {
 		}
 
 		private final int endIndex;
-		private final ExecutorService executor = Executors
-				.newFixedThreadPool(1);
+		private final ExecutorService executor = Executors.newSingleThreadExecutor();
 		private Random redundantRandom;
 		private Random redundantRandomData;
 		private final int startIndex;
@@ -101,87 +100,86 @@ public class FirstGenerationTraffic extends Traffic {
 		}
 
 		private boolean generateData(int i) throws Exception {
-			
-				if (i >= endIndex) {
-					return true;
-				}
-				logger.debug("Generating block " + i);
+			if (i >= endIndex) {
+				return true;
+			}
+			logger.debug("Generating block " + i);
 
-				ByteBuffer block = bufferQueue.poll();
-				if (block == null) {
-					block = ByteBuffer.allocate((int) BLOCK_SIZE);
-				}
+			ByteBuffer block = bufferQueue.poll();
+			if (block == null) {
+				block = ByteBuffer.allocate((int) blockSize);
+			}
 
-				// generate
-				if (assignedSize > 0) {
-					if (type == Type.UNIQUE) {
-						long bulkLenght = assignedSize;
-						if (bulkLenght > block.remaining()) {
-							assignedSize = (bulkLenght - block.remaining());
-							bulkLenght = block.remaining();
-						}
-						if (bulkLenght > 0) {
-							uniqueDataGenerator.getBulkData(block, (int) bulkLenght,
-									uniqueRandomData);
-							uniqueDataSize.addAndGet(bulkLenght);
-							uniqueBulks.incrementAndGet();
-                                                        assignedSize -= bulkLenght;
-						}
-					} else if (type == Type.REDUNDANT) {
-						long bulkLenght = assignedSize;
-						if (bulkLenght > block.remaining()) {
-							assignedSize = (bulkLenght - block.remaining());
-							bulkLenght = block.remaining();
-						}
-						if (bulkLenght > 0) {
-							// Generate real data later
-							redundantDataGenerator.getBulkData(block,
-									(int) bulkLenght, redundantRandomData);
-							redundantDataSize.addAndGet(bulkLenght);
-							redundantBulks.incrementAndGet();
-                                                        assignedSize -= bulkLenght;
-						}
+			// generate
+			if (assignedSize > 0) {
+				if (type == Type.UNIQUE) {
+					long bulkLenght = assignedSize;
+					if (bulkLenght > block.remaining()) {
+						assignedSize = (bulkLenght - block.remaining());
+						bulkLenght = block.remaining();
+					}
+					if (bulkLenght > 0) {
+						uniqueDataGenerator.getBulkData(block, (int) bulkLenght,
+								uniqueRandomData);
+						uniqueDataSize.addAndGet(bulkLenght);
+						uniqueBulks.incrementAndGet();
+						assignedSize -= bulkLenght;
+					}
+				} else if (type == Type.REDUNDANT) {
+					long bulkLenght = assignedSize;
+					if (bulkLenght > block.remaining()) {
+						assignedSize = (bulkLenght - block.remaining());
+						bulkLenght = block.remaining();
+					}
+					if (bulkLenght > 0) {
+						// Generate real data later
+						redundantDataGenerator.getBulkData(block,
+								(int) bulkLenght, redundantRandomData);
+						redundantDataSize.addAndGet(bulkLenght);
+						redundantBulks.incrementAndGet();
+						assignedSize -= bulkLenght;
 					}
 				}
-				while (block.remaining() > 0) {
-					Type nextType = switchType();
-					if (nextType == Type.UNIQUE) {
-						long bulkLenght = uniqueDistribution
-								.getNext(uniqueRandom);
-						Preconditions.checkState(bulkLenght > 0);
-						if (bulkLenght > block.remaining()) {
+			}
+			while (block.remaining() > 0) {
+				Type nextType = switchType();
+				if (nextType == Type.UNIQUE) {
+					long bulkLenght = uniqueDistribution
+							.getNext(uniqueRandom);
+					Preconditions.checkState(bulkLenght > 0);
+					if (bulkLenght > block.remaining()) {
 
-							assignedSize = (bulkLenght - block.remaining());
+						assignedSize = (bulkLenght - block.remaining());
 
-							bulkLenght = block.remaining();
-						}
-						if (bulkLenght > 0) {
-							uniqueDataGenerator.getBulkData(block, (int) bulkLenght,
-									uniqueRandomData);
-							uniqueDataSize.addAndGet(bulkLenght);
-							uniqueBulks.incrementAndGet();                                                
-						}
-					} else if (type == Type.REDUNDANT) {
-						long bulkLenght = redundantDistribution
-								.getNext(redundantRandom);
-						if (bulkLenght > block.remaining()) {
-							assignedSize = (bulkLenght - block.remaining());
-							bulkLenght = block.remaining();
-						}
-						if (bulkLenght > 0) {
-							redundantDataGenerator.getBulkData(block,
-									(int) bulkLenght, redundantRandomData);
-							redundantDataSize.addAndGet(bulkLenght);
-							redundantBulks.incrementAndGet();
-						}
+						bulkLenght = block.remaining();
+					}
+					if (bulkLenght > 0) {
+						uniqueDataGenerator.getBulkData(block, (int) bulkLenght,
+								uniqueRandomData);
+						uniqueDataSize.addAndGet(bulkLenght);
+						uniqueBulks.incrementAndGet();                                                
+					}
+				} else if (type == Type.REDUNDANT) {
+					long bulkLenght = redundantDistribution
+							.getNext(redundantRandom);
+					if (bulkLenght > block.remaining()) {
+						assignedSize = (bulkLenght - block.remaining());
+						bulkLenght = block.remaining();
+					}
+					if (bulkLenght > 0) {
+						redundantDataGenerator.getBulkData(block,
+								(int) bulkLenght, redundantRandomData);
+						redundantDataSize.addAndGet(bulkLenght);
+						redundantBulks.incrementAndGet();
 					}
 				}
-				// finished generate that block
+			}
+			// finished generate that block
 
-				block.flip();
-				blocks.set(i, block);
-				logger.debug("Generated block " + i);
-			
+			block.flip();
+			blocks.set(i, block);
+			logger.debug("Generated block " + i);
+
 			return true;
 
 		}
@@ -191,7 +189,6 @@ public class FirstGenerationTraffic extends Traffic {
 		}
 
 		public ByteBuffer getBuffer(int i) throws Exception {
-
 			if (directGeneration) {
 				generateData(i);
 				ByteBuffer b = blocks.get(i);
@@ -206,24 +203,24 @@ public class FirstGenerationTraffic extends Traffic {
 				if (f == null) {
 					f = loadBuffer(i);
 					f.get();
-					logger.warn("Waiting for block " + i);
+					logger.debug("Waiting for block " + i);
 				} else if (f.isDone() == false) {
 					f.get();
-					logger.warn("Waiting for block " + i);
+					logger.debug("Waiting for block " + i);
 				}
 				b = blocks.get(i);
 			}
-		
-				int preloadIndex = i +getPreloadWindow();
-				if (preloadIndex < endIndex) {
-					logger.debug(String.format(
-							"Preloading block %s at block %s", preloadIndex, i));
 
-					Future<Boolean> f2 = executor.submit(new GenerateJob(
-							preloadIndex));
-					block_state.set(preloadIndex, f2);
-				}
-			
+			int preloadIndex = i + getPreloadWindow();
+			if (preloadIndex < endIndex) {
+				logger.debug(String.format(
+						"Preloading block %s at block %s", preloadIndex, i));
+
+				Future<Boolean> f2 = executor.submit(new GenerateJob(
+						preloadIndex));
+				block_state.set(preloadIndex, f2);
+			}
+
 			return b;
 		}
 
@@ -247,8 +244,8 @@ public class FirstGenerationTraffic extends Traffic {
 		public String toString() {
 			StringBuilder builder = new StringBuilder();
 			builder.append("OnlineGeneratedTrafficSession [startIndex=")
-					.append(startIndex).append(", endIndex=").append(endIndex)
-					.append(", executor=").append(executor).append("]");
+			.append(startIndex).append(", endIndex=").append(endIndex)
+			.append(", executor=").append(executor).append("]");
 			return builder.toString();
 		}
 
@@ -263,6 +260,7 @@ public class FirstGenerationTraffic extends Traffic {
 
 	private final AtomicReferenceArray<Future<Boolean>> block_state;
 	private final int blockCount;
+	private final int blockSize;
 	private final AtomicReferenceArray<ByteBuffer> blocks;
 	private final ConcurrentLinkedQueue<ByteBuffer> bufferQueue = new ConcurrentLinkedQueue<ByteBuffer>();
 
@@ -272,13 +270,14 @@ public class FirstGenerationTraffic extends Traffic {
 	private final Distribution uniqueDistribution;
 	private final boolean directGeneration;
 	private final SeedGenerator seedGenerator;
-	
+
 	private final AtomicLong redundantBulks = new AtomicLong();
 	private final AtomicLong redundantDataSize = new AtomicLong();
 	private final AtomicLong uniqueBulks = new AtomicLong();
 	private final AtomicLong uniqueDataSize = new AtomicLong();
-	
-	public FirstGenerationTraffic(long size, int preloadWindow,
+
+	public FirstGenerationTraffic(long size, int blockSize,
+			int preloadWindow,
 			Distribution uniqueDistribution, Distribution redundantDistribution, 
 			SeedGenerator seedGenerator,
 			boolean directGeneration) throws Exception {
@@ -287,15 +286,14 @@ public class FirstGenerationTraffic extends Traffic {
 		this.redundantDistribution = redundantDistribution;
 		this.directGeneration = directGeneration;
 		this.seedGenerator = seedGenerator;
+		this.blockSize = blockSize;
 		
 		uniqueDataGenerator = new UniqueData();
-		
-
 		Random initialRedundantRandom = new MersenneTwisterRNG(seedGenerator);
 		redundantDataGenerator = new RedundantData(2 * 1024, 32 * 1024,
 				initialRedundantRandom);
 
-		long blockCount = (long) Math.ceil(1.0 * size / (BLOCK_SIZE));
+		long blockCount = (long) Math.ceil(1.0 * size / (blockSize));
 		if (blockCount > Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("file too large");
 		}
