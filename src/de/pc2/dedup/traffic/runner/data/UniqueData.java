@@ -12,9 +12,6 @@ public class UniqueData implements Data {
 		Preconditions.checkArgument(length > 1);
 		Preconditions.checkArgument(buf.remaining() >= length);
 		
-		ByteBuffer slice = buf.slice();
-		slice.limit(slice.position() + length);
-
-		RandomUtil.nextBytes(random_state, slice);
+		RandomUtil.nextBytes(random_state, buf, length);
 	}
 }

@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.log4j.Logger;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
@@ -21,6 +22,10 @@ import com.google.common.io.LineProcessor;
 import de.pc2.dedup.traffic.runner.SecondGenerationTraffic;
 
 public class SwitchDistribution {
+
+    	private static final Logger logger = Logger
+			.getLogger(SwitchDistribution.class);
+
 	class SwitchTypeDistribution {
 		int count = 0;
 		SortedMap<SecondGenerationTraffic.Type, Integer> count_map;
@@ -100,7 +105,9 @@ public class SwitchDistribution {
 			if (std != null) {
 				std.count += entry.getValue();
 				std.count_map.put(entry.getKey().second, std.count);
-			}
+			} else {
+                            logger.warn("Strange count map entry: " + entry.getKey().first + ", " + entry.getKey().second);
+                        }
 		}
 	}
 

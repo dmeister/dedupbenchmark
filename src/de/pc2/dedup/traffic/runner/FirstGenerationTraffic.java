@@ -85,8 +85,10 @@ public class FirstGenerationTraffic extends Traffic {
 			if (i >= blocks.length()) {
 				return;
 			}
-			logger.debug("Clear block " + i);
 
+                        if (logger.isDebugEnabled()) {
+			    logger.debug("Clear block " + i);
+                        }
 			ByteBuffer b = blocks.get(i);
 			if (b != null) {
 				b.flip();
@@ -103,8 +105,9 @@ public class FirstGenerationTraffic extends Traffic {
 			if (i >= endIndex) {
 				return true;
 			}
-			logger.debug("Generating block " + i);
-
+                        if (logger.isDebugEnabled()) {
+			    logger.debug("Generating block " + i);
+                        }
 			ByteBuffer block = bufferQueue.poll();
 			if (block == null) {
 				block = ByteBuffer.allocate((int) blockSize);
@@ -178,8 +181,10 @@ public class FirstGenerationTraffic extends Traffic {
 
 			block.flip();
 			blocks.set(i, block);
-			logger.debug("Generated block " + i);
 
+                        if (logger.isDebugEnabled()) {
+			    logger.debug("Generated block " + i);
+                        }
 			return true;
 
 		}
@@ -195,26 +200,34 @@ public class FirstGenerationTraffic extends Traffic {
 				Preconditions.checkState(b != null);
 				return b;
 			}
-			logger.debug("Get buffer " + i);
 
+                        if (logger.isDebugEnabled()) {
+			    logger.debug("Get buffer " + i);
+                        }
 			ByteBuffer b = blocks.get(i);
 			if (b == null) {
 				Future<Boolean> f = block_state.get(i);
 				if (f == null) {
 					f = loadBuffer(i);
 					f.get();
-					logger.debug("Waiting for block " + i);
+                                        if (logger.isDebugEnabled()) {
+					    logger.debug("Waiting for block " + i);
+                                        }
+                                        waitingBlocks.incrementAndGet();
 				} else if (f.isDone() == false) {
 					f.get();
 					logger.debug("Waiting for block " + i);
+                                        waitingBlocks.incrementAndGet();
 				}
 				b = blocks.get(i);
 			}
 
 			int preloadIndex = i + getPreloadWindow();
 			if (preloadIndex < endIndex) {
+                                if (logger.isDebugEnabled()) {
 				logger.debug(String.format(
 						"Preloading block %s at block %s", preloadIndex, i));
+                                }
 
 				Future<Boolean> f2 = executor.submit(new GenerateJob(
 						preloadIndex));
@@ -229,8 +242,9 @@ public class FirstGenerationTraffic extends Traffic {
 				return null;
 			}
 
-			logger.debug("Load buffer " + i);
-
+                        if (logger.isDebugEnabled()) {
+			    logger.debug("Load buffer " + i);
+                        }
 			Future<Boolean> f = block_state.get(i);
 			if (f != null) {
 				return f;
@@ -275,6 +289,7 @@ public class FirstGenerationTraffic extends Traffic {
 	private final AtomicLong redundantDataSize = new AtomicLong();
 	private final AtomicLong uniqueBulks = new AtomicLong();
 	private final AtomicLong uniqueDataSize = new AtomicLong();
+        private final AtomicLong waitingBlocks = new AtomicLong();
 
 	public FirstGenerationTraffic(long size, int blockSize,
 			int preloadWindow,
@@ -307,6 +322,7 @@ public class FirstGenerationTraffic extends Traffic {
 	public void close() {
 		logger.info(String.format("Unique %s, %s Bytes", uniqueBulks.get(), StorageUnit.formatUnit(uniqueDataSize.get())));
 		logger.info(String.format("Redundant %s, %s Bytes", redundantBulks.get(), StorageUnit.formatUnit(redundantDataSize.get())));
+                logger.info(String.format("Waited for %s blocks", StorageUnit.formatUnit(waitingBlocks.get())));
 	}
 
 	public int getBlockCount() {
@@ -318,3 +334,4 @@ public class FirstGenerationTraffic extends Traffic {
 		return new OnlineGeneratedTrafficSession(startindex, endindex);
 	}
 }
+
