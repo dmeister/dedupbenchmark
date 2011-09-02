@@ -5,12 +5,16 @@ import java.util.Random;
 
 import com.google.common.base.Preconditions;
 
+import de.pc2.dedup.traffic.runner.util.RandomUtil;
+
 public class UniqueData implements Data {
 	public void getBulkData(ByteBuffer buf, int length, Random random_state) {
 		Preconditions.checkArgument(length > 1);
-		byte[] ba = new byte[length];
-		random_state.nextBytes(ba);
+		Preconditions.checkArgument(buf.remaining() >= length);
+		
+		ByteBuffer slice = buf.slice();
+		slice.limit(slice.position() + length);
 
-		buf.put(ba, 0, length);
+		RandomUtil.nextBytes(random_state, slice);
 	}
 }
