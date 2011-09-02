@@ -22,18 +22,20 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 	private final int startindex;
 	private long startTime = 0;
 	private final int blockSize;
+	private final long baseOffset;
 	private LinkedHashMap<Long, Integer> statistics = new LinkedHashMap<Long, Integer>();
 
 	private volatile boolean successful = false;
 
 	public SequentialTrafficRunnable(Traffic traffic, FileChannel channel,
-			int startindex, int endindex, int blockSize, StartSignal signal) throws Exception {
+			long baseOffset, int startindex, int endindex, int blockSize, StartSignal signal) throws Exception {
 		super(traffic, channel);
 		session = traffic.getSession(startindex, endindex);
 		this.startindex = startindex;
 		this.endindex = endindex;
 		this.signal = signal;
 		this.blockSize = blockSize;
+		this.baseOffset = baseOffset;
 	}
 
 	public void close() {
@@ -59,8 +61,7 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 	public void preload() throws Exception {
 		int preloadEndIndex = startindex + (getTraffic().getPreloadWindow());
 
-		logger.debug(String
-				.format("Preload %s:%s", startindex, preloadEndIndex));
+		logger.debug(String.format("Preload %s:%s", startindex, preloadEndIndex));
 
 		for (int i = startindex; i < preloadEndIndex; i ++) {
 			if (i >= getTraffic().getBlockCount()) {
@@ -82,13 +83,12 @@ public class SequentialTrafficRunnable extends TrafficRunnable {
 				ByteBuffer block = session.getBuffer(i);
 				Preconditions.checkState(block != null);
 				Preconditions.checkState(block.remaining() == blockSize);
-				long pos = ((long) i) * blockSize;
+				long pos = baseOffset + ((long) i) * blockSize;
 				
 				getChannel().write(block, pos);
 				blocksWritten++;
 
-				long t = (System.currentTimeMillis() - this.startTime)
-						/ (1000 * 10);
+				long t = (System.currentTimeMillis() - this.startTime) / (1000 * 10);
 				if (statistics.containsKey(t) == false) {
 					statistics.put(t, 0);
 				}

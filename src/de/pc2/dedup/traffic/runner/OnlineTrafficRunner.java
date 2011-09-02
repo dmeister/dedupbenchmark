@@ -90,9 +90,9 @@ public class OnlineTrafficRunner {
 	 * @throws Exception
 	 */
 	protected static TrafficRunnable getTrafficRunnable(Traffic traffic,
-			FileChannel channel, int start, int end, int blockSize, StartSignal signal)
+			FileChannel channel, long baseOffset, int start, int end, int blockSize, StartSignal signal)
 			throws Exception {
-		return new SequentialTrafficRunnable(traffic, channel, start, end,
+		return new SequentialTrafficRunnable(traffic, channel, baseOffset, start, end,
 				blockSize,
 				signal);
 	}
@@ -123,6 +123,7 @@ public class OnlineTrafficRunner {
 		String backgroundProcess = null;
 		int preloadWindow = 8;
 		int blockSize = 1024 * 1024;
+		long offset = 0;
 		long size = 0;
 		boolean clusterDiscovery = false;
 		boolean firstGenerationData = true;
@@ -141,6 +142,9 @@ public class OnlineTrafficRunner {
 			}
 			if (args[i].startsWith("-bs=")) {
 				blockSize = (int)StorageUnit.parseUnit(args[i].substring("-bs=".length()));
+			}
+			if (args[i].startsWith("-o=")) {
+				offset = StorageUnit.parseUnit(args[i].substring("-p=".length()));
 			}
 			if (args[i].startsWith("-b=")) {
 				backgroundProcess = args[i].substring("-b=".length());
@@ -218,7 +222,7 @@ public class OnlineTrafficRunner {
 			if (end > blockCount) {
 				end = blockCount;
 			}
-			threads.add(getTrafficRunnable(traffic, channel, start, end, blockSize, signal));
+			threads.add(getTrafficRunnable(traffic, channel, offset, start, end, blockSize, signal));
 		}
 
 		Process process = null;
