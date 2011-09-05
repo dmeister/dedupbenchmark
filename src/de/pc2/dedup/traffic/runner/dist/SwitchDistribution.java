@@ -37,8 +37,8 @@ public class SwitchDistribution {
 
 	static class TypePair {
 		public final SecondGenerationTraffic.Type first;
-
 		public final SecondGenerationTraffic.Type second;
+		
 		public TypePair(SecondGenerationTraffic.Type first,
 				SecondGenerationTraffic.Type second) {
 			this.first = first;
@@ -89,10 +89,10 @@ public class SwitchDistribution {
 		return sd;
 	}
 
-	private final ConcurrentMap<SecondGenerationTraffic.Type, SwitchTypeDistribution> map;
+	private final Map<SecondGenerationTraffic.Type, SwitchTypeDistribution> map;
 
 	private SwitchDistribution(Map<TypePair, Integer> countMap) {
-		map = new MapMaker().concurrencyLevel(4).maximumSize(9).makeMap();
+		map = Maps.newHashMap();
 		map.put(SecondGenerationTraffic.Type.UNIQUE,
 				new SwitchTypeDistribution());
 		map.put(SecondGenerationTraffic.Type.INTERNALREDUNDANT,
@@ -106,8 +106,8 @@ public class SwitchDistribution {
 				std.count += entry.getValue();
 				std.count_map.put(entry.getKey().second, std.count);
 			} else {
-                            logger.warn("Strange count map entry: " + entry.getKey().first + ", " + entry.getKey().second);
-                        }
+                logger.warn("Strange count map entry: " + entry.getKey().first + ", " + entry.getKey().second);
+            }
 		}
 	}
 
